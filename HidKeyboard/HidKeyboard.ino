@@ -23,26 +23,24 @@
 #define KeyPad8 MEDIA_VOLUME_UP
 #define KeyPad9 MEDIA_VOLUME_DOWN
 
+
+// 24MHz is 41.666666666667ns per clock cycle
+// 0 is 300ns high, 900ns low
+// 1 is 600ns high, 600ns low
+// 300ns is 7.2 clock cycles
+// 600ns is 14.4 clock cycles
+// 900ns is 21.6 clock cycles
+// I however have no idea how to do this
 #define TX(LedColor) {\
   if (((LedColor)&0x80)==0) {\
        XdigitalWriteFast(3,4,HIGH);\
        (LedColor)=(LedColor)<<1;\
        XdigitalWriteFast(3,4,LOW);\
-       XdigitalWriteFast(3,4,LOW);\
-       XdigitalWriteFast(3,4,LOW);\
+       delayMicroseconds(1);\
    }else{\
        XdigitalWriteFast(3,4,HIGH);\
-       XdigitalWriteFast(3,4,HIGH);\
-       XdigitalWriteFast(3,4,HIGH);\
-       XdigitalWriteFast(3,4,HIGH);\
-       XdigitalWriteFast(3,4,HIGH);\
-       XdigitalWriteFast(3,4,HIGH);\
-       XdigitalWriteFast(3,4,HIGH);\
+       delayMicroseconds(1);\
        (LedColor)=(LedColor)<<1;\
-       XdigitalWriteFast(3,4,LOW);\
-       XdigitalWriteFast(3,4,LOW);\
-       XdigitalWriteFast(3,4,LOW);\
-       XdigitalWriteFast(3,4,LOW);\
        XdigitalWriteFast(3,4,LOW);\
        }\
   }
