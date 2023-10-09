@@ -43,6 +43,7 @@
 #define KeyPad8 MEDIA_VOLUME_UP
 #define KeyPad9 MEDIA_VOLUME_DOWN
 
+#define BRIGHTNESS 127
 //For windows user, if you ever played with other HID device with the same PID C55D
 //You may need to uninstall the previous driver completely        
 
@@ -61,7 +62,7 @@
        XdigitalWriteFast(3,4,HIGH);\
        XdigitalWriteFast(3,4,HIGH);\
        XdigitalWriteFast(3,4,HIGH);\
-       XdigitalWriteFast(3,4,HIGH);\                       
+       XdigitalWriteFast(3,4,HIGH);\
        (LedColor)=(LedColor)<<1;\
        XdigitalWriteFast(3,4,LOW);\
        XdigitalWriteFast(3,4,LOW);\
@@ -78,6 +79,69 @@ byte RValue,GValue,BValue;
 
 #include "USBHIDMediaKeyboard.h"
 
+// This block sends 24 bits to the LED
+// Each LED accepts 24 bits and forwards the rest
+// after the delay, a new block will need to be sent 
+//Send Green value from Bit7 to 0
+//Send Red value from Bit7 to 0
+//Send Blue value from Bit7 to 0
+#define sendColor() {\
+  TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);\
+  TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);\
+  TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);\
+}
+
+
+byte mode;
+
+#define setupCycleColor() {\
+  mode = 0;\
+  GValue=0x00;\
+  RValue=0x00;\
+  BValue=BRIGHTNESS;\
+}
+
+void cycleColor() {
+  switch(mode) {
+    case 0:
+      if (RValue == BRIGHTNESS || BValue == 0) {
+        mode = 1;
+        return cycleColor();
+      }
+      RValue++;
+      BValue--;
+      break;
+    case 1:
+      if (GValue == BRIGHTNESS || RValue == 0) {
+        mode = 2;
+        return cycleColor();
+      }
+      GValue++;
+      RValue--;
+      break;
+    case 2:
+      if (BValue == BRIGHTNESS || GValue == 0) {
+        mode = 0;
+        return cycleColor();
+      }
+      BValue++;
+      GValue--;
+      break;
+  }
+}
+
+void buttonPress (bool * pressPrev, int pin, int keycode) {
+  bool press = !digitalRead(pin);
+  if ((*pressPrev) != press) {
+    (*pressPrev) = press;
+    if (press) {
+      Keyboard_press(keycode);
+    } else {
+      Keyboard_release(keycode);
+    }
+    delay(50);  //naive debouncing
+  }
+}
 
 //// PIN = CODE
 // ------
@@ -98,6 +162,7 @@ byte RValue,GValue,BValue;
 // 15 = VCC -> all diodes down left
 // 16 = V33
 // diodes are daisy chained
+// I believe that the diodes are SK6812
 
 #define BUTTON1_PIN 11
 #define BUTTON2_PIN 17
@@ -135,77 +200,20 @@ void setup() {
   pinMode(EC11A_PIN, INPUT_PULLUP);
   pinMode(EC11B_PIN, INPUT_PULLUP);
 
-  // TODO: Figure out how to make all LEDs work
-  // pinMode(LEDPIN,OUTPUT);
-  // digitalWrite(LEDPIN,LOW); 
+  pinMode(LEDPIN,OUTPUT);
+  digitalWrite(LEDPIN,LOW); 
+
+  setupCycleColor();
 }
 
 void loop() {
-  bool button1Press = !digitalRead(BUTTON1_PIN);
-  if (button1PressPrev != button1Press) {
-    button1PressPrev = button1Press;
-    if (button1Press) {
-      Keyboard_press(KeyPad1);
-    } else {
-      Keyboard_release(KeyPad1);
-    }
-    delay(50);  //naive debouncing
-  }
 
-  bool button2Press = !digitalRead(BUTTON2_PIN);
-  if (button2PressPrev != button2Press) {
-    button2PressPrev = button2Press;
-    if (button2Press) {
-      Keyboard_press(KeyPad2);
-    } else {
-      Keyboard_release(KeyPad2);
-    }
-    delay(50);  //naive debouncing
-  }
-
-  bool button3Press = !digitalRead(BUTTON3_PIN);
-  if (button3PressPrev != button3Press) {
-    button3PressPrev = button3Press;
-    if (button3Press) {
-      Keyboard_press(KeyPad3);
-    } else {
-      Keyboard_release(KeyPad3);
-    }
-    delay(50);  //naive debouncing
-  }
-
-  bool button4Press = !digitalRead(BUTTON4_PIN);
-  if (button4PressPrev != button4Press) {
-    button4PressPrev = button4Press;
-    if (button4Press) {
-      Keyboard_press(KeyPad4);
-    } else {
-      Keyboard_release(KeyPad4);
-    }
-    delay(50);  //naive debouncing
-  }
-
-  bool button5Press = !digitalRead(BUTTON5_PIN);
-  if (button5PressPrev != button5Press) {
-    button5PressPrev = button5Press;
-    if (button5Press) {
-      Keyboard_press(KeyPad5);
-    } else {
-      Keyboard_release(KeyPad5);
-    }
-    delay(50);  //naive debouncing
-  }
-
-  bool button6Press = !digitalRead(BUTTON6_PIN);
-  if (button6PressPrev != button6Press) {
-    button6PressPrev = button6Press;
-    if (button6Press) {
-      Keyboard_press(KeyPad6);
-    } else {
-      Keyboard_release(KeyPad6);
-    }
-    delay(50);  //naive debouncing
-  }
+  buttonPress(&button1PressPrev, BUTTON1_PIN, KeyPad1);
+  buttonPress(&button2PressPrev, BUTTON2_PIN, KeyPad2);
+  buttonPress(&button3PressPrev, BUTTON3_PIN, KeyPad3);
+  buttonPress(&button4PressPrev, BUTTON4_PIN, KeyPad4);
+  buttonPress(&button5PressPrev, BUTTON5_PIN, KeyPad5);
+  buttonPress(&button6PressPrev, BUTTON6_PIN, KeyPad6);
 
   bool button7Press = !digitalRead(EC11D_PIN);
   if (button7PressPrev != button7Press) {
@@ -219,10 +227,7 @@ void loop() {
   }
 
   uint8_t currentPin = digitalRead(EC11A_PIN) * 10 + digitalRead(EC11B_PIN);
-  if (currentPin == mLastRotaryEncoderPinAB) {
-      return;
-    } 
-  else {
+  if (currentPin != mLastRotaryEncoderPinAB) {
         if (mLastRotaryEncoderPinAB == 00) {
           if (mLastestRotaryEncoderPinAB == 10 && currentPin == 01) {
             Consumer_press(KeyPad8);
@@ -239,15 +244,12 @@ void loop() {
         mLastRotaryEncoderPinAB = currentPin;       
   }
   delay(5);  //naive debouncing
-  
-  // GValue=0x07;
-  // RValue=0x00;
-  // BValue=0x10;
 
-  // //Send Green value from Bit7 to 0
-  // TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);
-  // //Send Red value from Bit7 to 0
-  // TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);
-  // //Send Blue value from Bit7 to 0
-  // TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);  
+  sendColor();
+  sendColor();
+  sendColor();
+  sendColor();
+  sendColor();
+  sendColor();
+  cycleColor();
 }
