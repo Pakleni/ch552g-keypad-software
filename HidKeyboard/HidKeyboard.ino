@@ -31,11 +31,16 @@
 // 600ns is 14.4 clock cycles
 // 900ns is 21.6 clock cycles
 // I however have no idea how to do this
+// delayMicroseconds(1);
+// __asm__(
+//   "nop \n"
+// );
+// _NOP();
 #define TX(LedColor) {\
   if (((LedColor)&0x80)==0) {\
        XdigitalWriteFast(3,4,HIGH);\
-       (LedColor)=(LedColor)<<1;\
        XdigitalWriteFast(3,4,LOW);\
+       (LedColor)=(LedColor)<<1;\
        delayMicroseconds(1);\
    }else{\
        XdigitalWriteFast(3,4,HIGH);\
@@ -67,7 +72,7 @@ byte RValue,GValue,BValue;
 }
 
 // brightness is from 0 to 255
-#define BRIGHTNESS 255
+#define BRIGHTNESS 60
 #define COLOR_DELAY 1000
 
 void handleColor() {
