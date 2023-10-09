@@ -32,15 +32,16 @@
 // #define KeyPad9 KEY_F21
 
 #define KeyPad1 KEY_LEFT_ALT
-#define KeyPad2 KEY_UP_ARROW
+#define KeyPad2 'w'
 #define KeyPad3 'f'
-#define KeyPad4 KEY_LEFT_ARROW
-#define KeyPad5 KEY_DOWN_ARROW
-#define KeyPad6 KEY_RIGHT_ARROW
-// TODO: implement volume up/down
-#define KeyPad7 KEY_F7
-#define KeyPad8 KEY_UP_ARROW
-#define KeyPad9 KEY_DOWN_ARROW
+#define KeyPad4 'a'
+#define KeyPad5 's'
+#define KeyPad6 'd'
+
+// These are done via HIDConsumer
+#define KeyPad7 MEDIA_VOLUME_MUTE
+#define KeyPad8 MEDIA_VOLUME_UP
+#define KeyPad9 MEDIA_VOLUME_DOWN
 
 //For windows user, if you ever played with other HID device with the same PID C55D
 //You may need to uninstall the previous driver completely        
@@ -75,7 +76,7 @@ byte RValue,GValue,BValue;
 #error "This example needs to be compiled with a USER USB setting"
 #endif
 
-#include "USBHIDKeyboard.h"
+#include "USBHIDMediaKeyboard.h"
 
 
 //// PIN = CODE
@@ -210,9 +211,9 @@ void loop() {
   if (button7PressPrev != button7Press) {
     button7PressPrev = button7Press;
     if (button7Press) {
-      Keyboard_press(KeyPad7);
+      Consumer_press(KeyPad7);
     } else {
-      Keyboard_release(KeyPad7);
+      Consumer_release(KeyPad7);
     }
     delay(50);  //naive debouncing
   }
@@ -224,14 +225,14 @@ void loop() {
   else {
         if (mLastRotaryEncoderPinAB == 00) {
           if (mLastestRotaryEncoderPinAB == 10 && currentPin == 01) {
-            Keyboard_press(KeyPad8);
+            Consumer_press(KeyPad8);
             delay(10);
-            Keyboard_release(KeyPad8);
+            Consumer_release(KeyPad8);
           }
           else if (mLastestRotaryEncoderPinAB == 01 && currentPin == 10) {
-            Keyboard_press(KeyPad9);
+            Consumer_press(KeyPad9);
             delay(10);
-            Keyboard_release(KeyPad9);
+            Consumer_release(KeyPad9);
           }
         }
         mLastestRotaryEncoderPinAB = mLastRotaryEncoderPinAB;
