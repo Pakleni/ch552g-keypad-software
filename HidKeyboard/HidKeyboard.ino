@@ -190,8 +190,11 @@ int8_t pin_state()
 }
 
 // Read changes frequently enough that overflows cannot happen.
+// Servicing and reading can be done at different rates.
+// I read the change in the main loop and service the encoder
 int8_t get_change()
 {
+  // This part is the servicing
   static volatile int m_change = 0;
 
   int8_t state_now = pin_state();
@@ -209,6 +212,7 @@ int8_t get_change()
     m_change += delta;
   }
 
+  // This part is the reading
   int8_t change = m_change;
   // the switch statement can make better code because only optimised
   // operations are used instead of generic division
