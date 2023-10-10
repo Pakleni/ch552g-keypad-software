@@ -23,103 +23,11 @@
 #define KeyPad8 MEDIA_VOLUME_UP
 #define KeyPad9 MEDIA_VOLUME_DOWN
 
-
-// 24MHz is 41.666666666667ns per clock cycle
-// 0 is 300ns high, 900ns low
-// 1 is 600ns high, 600ns low
-// 300ns is 7.2 clock cycles
-// 600ns is 14.4 clock cycles
-// 900ns is 21.6 clock cycles
-// I however have no idea how to do this
-// delayMicroseconds(1);
-// __asm__(
-//   "nop \n"
-// );
-// _NOP();
-#define TX(LedColor) {\
-  if (((LedColor)&0x80)==0) {\
-       XdigitalWriteFast(3,4,HIGH);\
-       XdigitalWriteFast(3,4,LOW);\
-       (LedColor)=(LedColor)<<1;\
-       delayMicroseconds(1);\
-   }else{\
-       XdigitalWriteFast(3,4,HIGH);\
-       delayMicroseconds(1);\
-       (LedColor)=(LedColor)<<1;\
-       XdigitalWriteFast(3,4,LOW);\
-       }\
-  }
-
 #ifndef USER_USB_RAM
 #error "This example needs to be compiled with a USER USB setting"
 #endif
 
 #include "USBHIDMediaKeyboard.h"
-
-// This block sends 24 bits to the LED
-// Each LED accepts 24 bits and forwards the rest
-// after the delay, a new block will need to be sent
-//
-// Send Green value from Bit7 to 0
-// Send Red value from Bit7 to 0
-// Send Blue value from Bit7 to 0
-//
-byte RValue,GValue,BValue;
-#define sendColor() {\
-  TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);\
-  TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);\
-  TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);\
-}
-
-// brightness is from 0 to 255
-#define BRIGHTNESS 60
-#define COLOR_DELAY 1000
-
-void handleColor() {
-  static byte colorDelay = 0;
-  static byte mode = 0;
-  static byte Red = 0x00,Green = 0x00,Blue = BRIGHTNESS;
-
-  // Send color codes to the daisy chained LEDs
-  for (int i = 0; i < 6; i++) {
-    RValue = Red;
-    GValue = Green;
-    BValue = Blue;
-    sendColor();
-  }
-
-  // The color delay is used for delaying a color change
-  if (colorDelay > 0) {
-    colorDelay--;
-    return;
-  }
-
-  switch(mode) {
-    case 0:
-      Red++;
-      Blue--;
-      if (Red == BRIGHTNESS) {
-        mode = 1;
-      }
-      break;
-    case 1:
-      Green++;
-      Red--;
-      if (Green == BRIGHTNESS) {
-        mode = 2;
-      }
-      break;
-    case 2:
-      Blue++;
-      Green--;
-      if (Blue == BRIGHTNESS) {
-        mode = 0;
-      }
-      break;
-  }
-
-  colorDelay = COLOR_DELAY;
-}
 
 //// PIN = CODE
 // ------
@@ -151,7 +59,8 @@ void handleColor() {
 #define EC11D_PIN 33
 #define EC11A_PIN 31
 #define EC11B_PIN 30
-#define LEDPIN 34
+#define LEDPIN_PORT 3
+#define LEDPIN_PIN 4
 volatile int     mRotaryEncoderPulse        = 0;
 volatile uint8_t mLastestRotaryEncoderPinAB = 0; // last last pin value of A and B
 volatile uint8_t mLastRotaryEncoderPinAB    = 0; // last pin value of A and B
@@ -192,6 +101,93 @@ byte delays[] = {
   0,
 };
 
+// 24MHz is 41.666666666667ns per clock cycle
+// 0 is 300ns high, 900ns low
+// 1 is 600ns high, 600ns low
+// 300ns is 7.2 clock cycles
+// 600ns is 14.4 clock cycles
+// 900ns is 21.6 clock cycles
+// I however have no idea how to do this
+// delayMicroseconds(1);
+// __asm__(
+//   "nop \n"
+// );
+// _NOP();
+#define TX(LedColor) {\
+  if (((LedColor)&0x80)==0) {\
+       digitalWriteFast(LEDPIN_PORT,LEDPIN_PIN,HIGH);\
+       digitalWriteFast(LEDPIN_PORT,LEDPIN_PIN,LOW);\
+       (LedColor)=(LedColor)<<1 | (LedColor)>>7;\
+       delayMicroseconds(1);\
+   }else{\
+       digitalWriteFast(LEDPIN_PORT,LEDPIN_PIN,HIGH);\
+       (LedColor)=(LedColor)<<1 | (LedColor)>>7;\
+       delayMicroseconds(1);\
+       digitalWriteFast(LEDPIN_PORT,LEDPIN_PIN,LOW);\
+       }\
+  }
+
+// This block sends 24 bits to the LED
+// Each LED accepts 24 bits and forwards the rest
+// after the delay, a new block will need to be sent
+//
+// Send Green value from Bit7 to 0
+// Send Red value from Bit7 to 0
+// Send Blue value from Bit7 to 0
+//
+#define sendColor() {\
+  TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);\
+  TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);\
+  TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);\
+}
+
+// brightness is from 0 to 255
+#define BRIGHTNESS 60
+#define COLOR_DELAY 1000
+byte RValue=0x00,GValue=0x00,BValue=BRIGHTNESS;
+
+void handleColor() {
+  static byte colorDelay = 0;
+  static byte mode = 0;
+
+  // The color delay is used for delaying a color change
+  if (colorDelay > 0) {
+    colorDelay--;
+    return;
+  }
+
+  switch(mode) {
+    case 0:
+      RValue++;
+      BValue--;
+      if (RValue == BRIGHTNESS) {
+        mode = 1;
+      }
+      break;
+    case 1:
+      GValue++;
+      RValue--;
+      if (GValue == BRIGHTNESS) {
+        mode = 2;
+      }
+      break;
+    case 2:
+      BValue++;
+      GValue--;
+      if (BValue == BRIGHTNESS) {
+        mode = 0;
+      }
+      break;
+  }
+
+  // Send color codes to the daisy chained LEDs
+  for(int i = 0; i < 6; i++){
+    sendColor();
+  }
+
+  colorDelay = COLOR_DELAY;
+}
+
 void buttonPress(int i) {
   bool press = !digitalRead(pins[i]);
   if (pressPrev[i] != press) {
@@ -217,8 +213,8 @@ void setup() {
   pinMode(EC11A_PIN, INPUT_PULLUP);
   pinMode(EC11B_PIN, INPUT_PULLUP);
 
-  pinMode(LEDPIN,OUTPUT);
-  digitalWrite(LEDPIN,LOW); 
+  pinModeFast(LEDPIN_PORT,LEDPIN_PIN,OUTPUT);
+  digitalWriteFast(LEDPIN_PORT,LEDPIN_PIN,LOW); 
 }
 
 void loop() {
