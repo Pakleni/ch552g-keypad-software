@@ -277,25 +277,24 @@ void loop()
   }
 
   // Rotary Encoder Button
-  static bool presPrevRE = false;
-  static unsigned long lastPressedRE = 0;
+  static struct Button button = {false, 0, EC11D_PIN, RotaryKeypress};
 
   // debounce
-  if (millis() > lastPressedRE + 50)
+  if (millis() > button.lastPressed + 50)
   {
-    bool press = !digitalRead(EC11D_PIN);
-    if (presPrevRE != press)
+    bool press = !digitalRead(button.pin);
+    if (button.pressPrev != press)
     {
-      presPrevRE = press;
+      button.pressPrev = press;
       if (press)
       {
-        Consumer_press(RotaryKeypress);
+        Consumer_press(button.key);
       }
       else
       {
-        Consumer_release(RotaryKeypress);
+        Consumer_release(button.key);
       }
-      lastPressedRE = millis();
+      button.lastPressed = millis();
     }
   }
 
