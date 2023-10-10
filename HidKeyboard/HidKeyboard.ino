@@ -164,74 +164,16 @@ void buttonPress(int i)
   }
 }
 
-void readEncoder()
-{
-  static uint8_t state = 0;
-  bool CLKstate = digitalRead(EC11A_PIN);
-  bool DTstate = digitalRead(EC11B_PIN);
-  switch (state)
-  {
-  case 0: // Idle state, encoder not turning
-    if (!CLKstate)
-    { // Turn clockwise and CLK goes low first
-      state = 1;
-    }
-    else if (!DTstate)
-    { // Turn anticlockwise and DT goes low first
-      state = 4;
-    }
-    break;
-  // Clockwise rotation
-  case 1:
-    if (!DTstate)
-    { // Continue clockwise and DT will go low after CLK
-      state = 2;
-    }
-    break;
-  case 2:
-    if (CLKstate)
-    { // Turn further and CLK will go high first
-      state = 3;
-    }
-    break;
-  case 3:
-    if (CLKstate && DTstate)
-    { // Both CLK and DT now high as the encoder completes one step clockwise
-      state = 0;
-      Consumer_write(RotaryCW);
-    }
-    break;
-  // Anticlockwise rotation
-  case 4: // As for clockwise but with CLK and DT reversed
-    if (!CLKstate)
-    {
-      state = 5;
-    }
-    break;
-  case 5:
-    if (DTstate)
-    {
-      state = 6;
-    }
-    break;
-  case 6:
-    if (CLKstate && DTstate)
-    {
-      state = 0;
-      Consumer_write(RotaryCCW);
-    }
-    break;
-  }
-}
+// This code controls the rotary encoder
+// adapted from
+// https://github.com/micromouseonline/BasicEncoder
+#define m_pin_a EC11A_PIN
+#define m_pin_b EC11B_PIN
+#define m_pin_active LOW
+#define m_steps_per_count 4
+#define m_reversed true
 
-int8_t m_pin_a = 0;
-int8_t m_pin_b = 0;
-uint8_t m_pin_active = LOW;
-uint8_t m_steps_per_count = 4;
-bool m_reversed = true;
-volatile int m_change = 0;
 int8_t m_previous_state = 0;
-int m_steps = 0;
 
 int8_t pin_state()
 {
@@ -247,18 +189,11 @@ int8_t pin_state()
   return state_now;
 }
 
-void BasicEncoder(int8_t pinA, int8_t pinB, uint8_t active_state, uint8_t steps)
+// Read changes frequently enough that overflows cannot happen.
+int8_t get_change()
 {
-  m_pin_a = pinA;
-  m_pin_b = pinB;
-  m_pin_active = active_state;
-  m_steps_per_count = steps;
-  m_previous_state = pin_state();
-  m_change = 0;
-}
+  static volatile int m_change = 0;
 
-void service()
-{
   int8_t state_now = pin_state();
   state_now ^= state_now >> 1; // two bit gray-to-binary
   int8_t difference = m_previous_state - state_now;
@@ -272,13 +207,8 @@ void service()
       delta = -delta;
     }
     m_change += delta;
-    m_steps += delta;
   }
-}
 
-// Read changes frequently enough that overflows cannot happen.
-int8_t get_change()
-{
   int8_t change = m_change;
   // the switch statement can make better code because only optimised
   // operations are used instead of generic division
@@ -313,7 +243,7 @@ void setup()
   pinMode(EC11B_PIN, INPUT_PULLUP);
   pinMode(LEDPIN, OUTPUT);
 
-  BasicEncoder(EC11A_PIN, EC11B_PIN, LOW, 4);
+  m_previous_state = pin_state();
 }
 
 void loop()
@@ -324,9 +254,7 @@ void loop()
     buttonPress(i);
   }
 
-  // // Rotary Encoder A and B
-  // readEncoder();
-  service();
+  // Rotary Encoder A and B
   int encoder_change = get_change();
   if (encoder_change)
   {
