@@ -59,8 +59,7 @@
 #define EC11D_PIN 33
 #define EC11A_PIN 31
 #define EC11B_PIN 30
-#define LEDPIN_PORT 3
-#define LEDPIN_PIN 4
+#define LEDPIN 34
 volatile int     mRotaryEncoderPulse        = 0;
 volatile uint8_t mLastestRotaryEncoderPinAB = 0; // last last pin value of A and B
 volatile uint8_t mLastRotaryEncoderPinAB    = 0; // last pin value of A and B
@@ -101,32 +100,6 @@ byte delays[] = {
   0,
 };
 
-// 24MHz is 41.666666666667ns per clock cycle
-// 0 is 300ns high, 900ns low
-// 1 is 600ns high, 600ns low
-// 300ns is 7.2 clock cycles
-// 600ns is 14.4 clock cycles
-// 900ns is 21.6 clock cycles
-// I however have no idea how to do this
-// delayMicroseconds(1);
-// __asm__(
-//   "nop \n"
-// );
-// _NOP();
-#define TX(LedColor) {\
-  if (((LedColor)&0x80)==0) {\
-       digitalWriteFast(LEDPIN_PORT,LEDPIN_PIN,HIGH);\
-       digitalWriteFast(LEDPIN_PORT,LEDPIN_PIN,LOW);\
-       (LedColor)=(LedColor)<<1 | (LedColor)>>7;\
-       delayMicroseconds(1);\
-   }else{\
-       digitalWriteFast(LEDPIN_PORT,LEDPIN_PIN,HIGH);\
-       (LedColor)=(LedColor)<<1 | (LedColor)>>7;\
-       delayMicroseconds(1);\
-       digitalWriteFast(LEDPIN_PORT,LEDPIN_PIN,LOW);\
-       }\
-  }
-
 // This block sends 24 bits to the LED
 // Each LED accepts 24 bits and forwards the rest
 // after the delay, a new block will need to be sent
@@ -135,16 +108,69 @@ byte delays[] = {
 // Send Red value from Bit7 to 0
 // Send Blue value from Bit7 to 0
 //
-#define sendColor() {\
-  TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);TX(GValue);\
-  TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);TX(RValue);\
-  TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);TX(BValue);\
+// 24MHz is 41.666666666667ns per clock cycle
+// 0 is 300ns high, 900ns low
+// 1 is 600ns high, 600ns low
+// 300ns is 7.2 clock cycles
+// 600ns is 14.4 clock cycles
+// 900ns is 21.6 clock cycles
+void neopixel_show_long_P3_4(uint32_t dataAndLen) {
+  //'dpl' (LSB),'dph','b' & 'acc'
+  //DPTR is the array address, B is the low byte of length
+  __asm__("    mov r3, b                           \n"
+          ";save EA to R6                          \n"
+          "    mov c,_EA                           \n"
+          "    clr a                               \n"
+          "    rlc a                               \n"
+          "    mov r6, a                           \n"
+          ";disable interrupt                      \n"
+          "    clr _EA                             \n"
+
+          "byteLoop$:                              \n"
+          "    movx  a,@dptr                       \n"
+          "    inc dptr                            \n"
+          "    mov r2,#8                           \n"
+          "bitLoop$:                               \n"
+          "    rlc a                               \n"
+          "    setb _P3_4                          \n"
+          "    jc bit7High$                        \n"
+          "    clr _P3_4                           \n"
+          "bit7High$:                              \n"
+          "    mov r1,#5                           \n"
+          "bitDelay$:                              \n"
+          "    djnz r1,bitDelay$                   \n"
+          "    clr _P3_4                           \n"
+          "    djnz r2,bitLoop$                    \n"
+          "    djnz r3,byteLoop$                   \n"
+
+          ";restore EA from R6                     \n"
+          "    mov a,r6                            \n"
+          "    jz  skipRestoreEA_NP$               \n"
+          "    setb  _EA                           \n"
+          "skipRestoreEA_NP$:                      \n"
+          );
+          (void)dataAndLen;
 }
 
 // brightness is from 0 to 255
 #define BRIGHTNESS 60
 #define COLOR_DELAY 1000
 byte RValue=0x00,GValue=0x00,BValue=BRIGHTNESS;
+#define NUM_LEDS 6
+#define NUM_BYTES (NUM_LEDS*3)
+__xdata uint8_t ledData[NUM_BYTES];
+
+#define set_pixel_for_GRB_LED(ADDR, INDEX, R, G, B)                            \
+  {                                                                            \
+    __xdata uint8_t *ptr = (ADDR) + ((INDEX)*3);                               \
+    ptr[0] = (G);                                                              \
+    ptr[1] = (R);                                                              \
+    ptr[2] = (B);                                                              \
+  };
+
+#define neopixel_show_P3_4(ADDR, LEN)                                          \
+  neopixel_show_long_P3_4((((uint16_t)(ADDR)) & 0xFFFF) |                      \
+                          (((uint32_t)(LEN)&0xFF) << 16));
 
 void handleColor() {
   static byte colorDelay = 0;
@@ -181,9 +207,11 @@ void handleColor() {
   }
 
   // Send color codes to the daisy chained LEDs
-  for(int i = 0; i < 6; i++){
-    sendColor();
+  for(int i = 0; i < 6; i++) {
+    set_pixel_for_GRB_LED(ledData, i, RValue, GValue, BValue);
   }
+  neopixel_show_P3_4(ledData, NUM_BYTES);
+
 
   colorDelay = COLOR_DELAY;
 }
@@ -213,8 +241,8 @@ void setup() {
   pinMode(EC11A_PIN, INPUT_PULLUP);
   pinMode(EC11B_PIN, INPUT_PULLUP);
 
-  pinModeFast(LEDPIN_PORT,LEDPIN_PIN,OUTPUT);
-  digitalWriteFast(LEDPIN_PORT,LEDPIN_PIN,LOW); 
+  pinMode(LEDPIN,OUTPUT);
+  digitalWrite(LEDPIN,LOW); 
 }
 
 void loop() {
