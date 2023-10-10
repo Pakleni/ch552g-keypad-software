@@ -29,27 +29,6 @@
 #include "src/userUsbHidMediaKeyboard/USBHIDMediaKeyboard.h"
 #include <WS2812.h>
 
-//// PIN = CODE
-// ------
-// 1 = 32 -> BUTTON6
-// 2 = 14 -> BUTTON5
-// 3 = 15 -> BUTTON4
-// 4 = 16 -> BUTTON3
-// 5 = 17 -> BUTTON2
-// 6 = RST
-// 7 = 31 -> ?
-// 8 = 30
-// 9 = 11 -> BUTTON1
-// 10 = 33 -> ?
-// 11 = 34
-// 12 = 36 -> SW1
-// 13 = 37
-// 14 = GND -> all diodes upper right
-// 15 = VCC -> all diodes down left
-// 16 = V33
-// diodes are daisy chained
-// I believe that the diodes are SK6812
-
 #define BUTTON1_PIN 11
 #define BUTTON2_PIN 17
 #define BUTTON3_PIN 16
@@ -65,21 +44,21 @@
 #define BRIGHTNESS 0.3
 // color delay controls the speed of the color change
 // higher value means slower change
-#define COLOR_DELAY 1000
+// it is in millis
+#define COLOR_DELAY 50
 #define NUM_LEDS 6
 #define NUM_BYTES (NUM_LEDS * 3)
 
 void handleColor()
 {
   static byte mode = 0;
-  static byte colorDelay = 0;
   static byte RValue = 0x00, GValue = 0x00, BValue = 0xff;
   static __xdata uint8_t ledData[NUM_BYTES];
+  static unsigned long lastColorChange = 0;
 
   // The color delay is used for delaying a color change
-  if (colorDelay > 0)
+  if (millis() < lastColorChange + COLOR_DELAY)
   {
-    colorDelay--;
     return;
   }
 
@@ -122,7 +101,7 @@ void handleColor()
   // neopixel_show_P3_4 function as well
   neopixel_show_P3_4(ledData, NUM_BYTES);
 
-  colorDelay = COLOR_DELAY;
+  lastColorChange = millis();
 }
 
 // This controlls the button
@@ -185,6 +164,66 @@ void buttonPress(int i)
   }
 }
 
+void readEncoder()
+{
+  static uint8_t state = 0;
+  bool CLKstate = digitalRead(EC11A_PIN);
+  bool DTstate = digitalRead(EC11B_PIN);
+  switch (state)
+  {
+  case 0: // Idle state, encoder not turning
+    if (!CLKstate)
+    { // Turn clockwise and CLK goes low first
+      state = 1;
+    }
+    else if (!DTstate)
+    { // Turn anticlockwise and DT goes low first
+      state = 4;
+    }
+    break;
+  // Clockwise rotation
+  case 1:
+    if (!DTstate)
+    { // Continue clockwise and DT will go low after CLK
+      state = 2;
+    }
+    break;
+  case 2:
+    if (CLKstate)
+    { // Turn further and CLK will go high first
+      state = 3;
+    }
+    break;
+  case 3:
+    if (CLKstate && DTstate)
+    { // Both CLK and DT now high as the encoder completes one step clockwise
+      state = 0;
+      Consumer_write(RotaryCW);
+    }
+    break;
+  // Anticlockwise rotation
+  case 4: // As for clockwise but with CLK and DT reversed
+    if (!CLKstate)
+    {
+      state = 5;
+    }
+    break;
+  case 5:
+    if (DTstate)
+    {
+      state = 6;
+    }
+    break;
+  case 6:
+    if (CLKstate && DTstate)
+    {
+      state = 0;
+      Consumer_write(RotaryCCW);
+    }
+    break;
+  }
+}
+
 void setup()
 {
   USBInit();
@@ -207,6 +246,9 @@ void loop()
   {
     buttonPress(i);
   }
+
+  // Rotary Encoder A and B
+  readEncoder();
 
   // Rotary Encoder Button
   static bool presPrevRE = false;
@@ -231,34 +273,6 @@ void loop()
     }
   }
 
-  // Rotary Encoder A and B
-  static volatile uint8_t mLastestRotaryEncoderPinAB = 0; // last last pin value of A and B
-  static volatile uint8_t mLastRotaryEncoderPinAB = 0;    // last pin value of A and B
-  static unsigned long lastRotated = 0;
-
-  // debounce
-  if (millis() > 0)//lastRotated + 10)
-  {
-    uint8_t currentPin = digitalRead(EC11A_PIN) * 10 + digitalRead(EC11B_PIN);
-    if (currentPin != mLastRotaryEncoderPinAB)
-    {
-      if (mLastRotaryEncoderPinAB == 00)
-      {
-        if (mLastestRotaryEncoderPinAB == 10 && currentPin == 01)
-        {
-          Consumer_write(RotaryCCW);
-          lastRotated = millis();
-        }
-        else if (mLastestRotaryEncoderPinAB == 01 && currentPin == 10)
-        {
-          Consumer_write(RotaryCW);
-          lastRotated = millis();
-        }
-      }
-      mLastestRotaryEncoderPinAB = mLastRotaryEncoderPinAB;
-      mLastRotaryEncoderPinAB = currentPin;
-    }
-  }
   // Cycle the hue of the displayed color
   handleColor();
 }
