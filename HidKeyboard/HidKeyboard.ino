@@ -40,8 +40,8 @@
 #define EC11B_PIN 30
 #define LEDPIN 34
 
-// brightness is from 0 to 1
-#define BRIGHTNESS 0.3
+// brightness is from 0 to 100
+double brightness = 30;
 // color delay controls the speed of the color change
 // higher value means slower change
 // it is in millis
@@ -65,24 +65,24 @@ void handleColor()
   switch (mode)
   {
   case 0:
-    RValue++;
-    BValue--;
+    ++RValue;
+    --BValue;
     if (RValue == 0xff)
     {
       mode = 1;
     }
     break;
   case 1:
-    GValue++;
-    RValue--;
+    ++GValue;
+    --RValue;
     if (GValue == 0xff)
     {
       mode = 2;
     }
     break;
   case 2:
-    BValue++;
-    GValue--;
+    ++BValue;
+    --GValue;
     if (BValue == 0xff)
     {
       mode = 0;
@@ -90,10 +90,14 @@ void handleColor()
     break;
   }
 
+  double pbrightness = brightness / 100.0;
+  byte red = RValue * pbrightness;
+  byte green = GValue * pbrightness;
+  byte blue = BValue * pbrightness;
   // Send color codes to the daisy chained LEDs
   for (int i = 0; i < 6; i++)
   {
-    set_pixel_for_GRB_LED(ledData, i, RValue * BRIGHTNESS, GValue * BRIGHTNESS, BValue * BRIGHTNESS);
+    set_pixel_for_GRB_LED(ledData, i, red, green, blue);
   }
   // This sends 24 bits for each LED
   // Each LED accepts 24 bits and forwards the rest
@@ -107,59 +111,42 @@ void handleColor()
 // This controlls the button
 // presses and releases
 // for the 6 buttons
+struct Button
+{
+  bool pressPrev;
+  unsigned long lastPressed;
+  byte pin;
+  byte key;
+};
+
+struct Button buttons[] = {
+    {false, 0, BUTTON1_PIN, KeyPad1},
+    {false, 0, BUTTON2_PIN, KeyPad2},
+    {false, 0, BUTTON3_PIN, KeyPad3},
+    {false, 0, BUTTON4_PIN, KeyPad4},
+    {false, 0, BUTTON5_PIN, KeyPad5},
+    {false, 0, BUTTON6_PIN, KeyPad6},
+};
+
 void buttonPress(int i)
 {
-  static byte pins[] = {
-      BUTTON1_PIN,
-      BUTTON2_PIN,
-      BUTTON3_PIN,
-      BUTTON4_PIN,
-      BUTTON5_PIN,
-      BUTTON6_PIN,
-  };
+  struct Button *button = buttons + i;
 
-  static byte keypad[] = {
-      KeyPad1,
-      KeyPad2,
-      KeyPad3,
-      KeyPad4,
-      KeyPad5,
-      KeyPad6,
-  };
-
-  static bool pressPrev[] = {
-      false,
-      false,
-      false,
-      false,
-      false,
-      false,
-  };
-
-  static unsigned long lastPressed[] = {
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-  };
-
-  if (millis() > lastPressed[i] + 50)
+  if (millis() > button->lastPressed + 50)
   {
-    bool press = !digitalRead(pins[i]);
-    if (pressPrev[i] != press)
+    bool press = !digitalRead(button->pin);
+    if (button->pressPrev != press)
     {
-      pressPrev[i] = press;
+      button->pressPrev = press;
       if (press)
       {
-        Keyboard_press(keypad[i]);
+        Keyboard_press(button->key);
       }
       else
       {
-        Keyboard_release(keypad[i]);
+        Keyboard_release(button->key);
       }
-      lastPressed[i] = millis();
+      button->lastPressed = millis();
     }
   }
 }
@@ -259,16 +246,33 @@ void loop()
   }
 
   // Rotary Encoder A and B
+  // button 0 + encoder should control the brightness
+  // if the button is not pressed, then the encoder
+  // should control the volume
   int encoder_change = get_change();
   if (encoder_change)
   {
-    if (encoder_change > 0)
+    if (encoder_change > 0 && !buttons->pressPrev)
     {
       Consumer_write(RotaryCW);
     }
-    else
+    else if (encoder_change < 0 && !buttons->pressPrev)
     {
       Consumer_write(RotaryCCW);
+    }
+    else if (encoder_change > 0 && buttons->pressPrev)
+    {
+      if (brightness < 100)
+      {
+        ++brightness;
+      }
+    }
+    else if (encoder_change < 0 && buttons->pressPrev)
+    {
+      if (brightness > 0)
+      {
+        --brightness;
+      }
     }
   }
 
