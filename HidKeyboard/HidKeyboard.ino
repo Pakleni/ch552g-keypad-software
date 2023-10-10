@@ -18,9 +18,9 @@
 #define KeyPad6 'd'
 
 // These are done via HIDConsumer
-#define KeyPad7 MEDIA_VOLUME_MUTE
-#define KeyPad8 MEDIA_VOLUME_UP
-#define KeyPad9 MEDIA_VOLUME_DOWN
+#define RotaryKeypress MEDIA_VOLUME_MUTE
+#define RotaryCW MEDIA_VOLUME_UP
+#define RotaryCCW MEDIA_VOLUME_DOWN
 
 #ifndef USER_USB_RAM
 #error "This example needs to be compiled with a USER USB setting"
@@ -157,7 +157,7 @@ void buttonPress(int i)
       false,
   };
 
-  static byte delays[] = {
+  static unsigned long lastPressed[] = {
       0,
       0,
       0,
@@ -166,25 +166,22 @@ void buttonPress(int i)
       0,
   };
 
-  // debounce
-  if (delays[i] > 0)
+  if (millis() > lastPressed[i] + 50)
   {
-    delays[i]--;
-    return;
-  }
-  bool press = !digitalRead(pins[i]);
-  if (pressPrev[i] != press)
-  {
-    pressPrev[i] = press;
-    if (press)
+    bool press = !digitalRead(pins[i]);
+    if (pressPrev[i] != press)
     {
-      Keyboard_press(keypad[i]);
+      pressPrev[i] = press;
+      if (press)
+      {
+        Keyboard_press(keypad[i]);
+      }
+      else
+      {
+        Keyboard_release(keypad[i]);
+      }
+      lastPressed[i] = millis();
     }
-    else
-    {
-      Keyboard_release(keypad[i]);
-    }
-    delays[i] = 50;
   }
 }
 
@@ -212,43 +209,35 @@ void loop()
   }
 
   // Rotary Encoder Button
-  static bool pressPrev7 = false;
-  static byte delay7 = 0;
+  static bool presPrevRE = false;
+  static unsigned long lastPressedRE = 0;
 
   // debounce
-  if (delay7 > 0)
-  {
-    delay7--;
-  }
-  else
+  if (millis() > lastPressedRE + 50)
   {
     bool press = !digitalRead(EC11D_PIN);
-    if (pressPrev7 != press)
+    if (presPrevRE != press)
     {
-      pressPrev7 = press;
+      presPrevRE = press;
       if (press)
       {
-        Consumer_press(KeyPad7);
+        Consumer_press(RotaryKeypress);
       }
       else
       {
-        Consumer_release(KeyPad7);
+        Consumer_release(RotaryKeypress);
       }
-      delay7 = 50; // naive debouncing
+      lastPressedRE = millis();
     }
   }
 
   // Rotary Encoder A and B
   static volatile uint8_t mLastestRotaryEncoderPinAB = 0; // last last pin value of A and B
   static volatile uint8_t mLastRotaryEncoderPinAB = 0;    // last pin value of A and B
-  static byte delay89 = 0;
+  static unsigned long lastRotated = 0;
 
   // debounce
-  if (delay89 > 0)
-  {
-    delay89--;
-  }
-  else
+  if (millis() > 0)//lastRotated + 10)
   {
     uint8_t currentPin = digitalRead(EC11A_PIN) * 10 + digitalRead(EC11B_PIN);
     if (currentPin != mLastRotaryEncoderPinAB)
@@ -257,21 +246,18 @@ void loop()
       {
         if (mLastestRotaryEncoderPinAB == 10 && currentPin == 01)
         {
-          Consumer_press(KeyPad8);
-          delay(10);
-          Consumer_release(KeyPad8);
+          Consumer_write(RotaryCCW);
+          lastRotated = millis();
         }
         else if (mLastestRotaryEncoderPinAB == 01 && currentPin == 10)
         {
-          Consumer_press(KeyPad9);
-          delay(10);
-          Consumer_release(KeyPad9);
+          Consumer_write(RotaryCW);
+          lastRotated = millis();
         }
       }
       mLastestRotaryEncoderPinAB = mLastRotaryEncoderPinAB;
       mLastRotaryEncoderPinAB = currentPin;
     }
-    delay89 = 5;
   }
   // Cycle the hue of the displayed color
   handleColor();
