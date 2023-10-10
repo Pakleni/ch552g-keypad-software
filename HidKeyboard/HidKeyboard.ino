@@ -7,8 +7,8 @@
 
   This example code is in the public domain.
 
-  modified by @pakleni
-
+  modified 2023
+  by pakleni
 */
 #define KeyPad1 KEY_LEFT_ALT
 #define KeyPad2 'w'
@@ -26,7 +26,7 @@
 #error "This example needs to be compiled with a USER USB setting"
 #endif
 
-#include "USBHIDMediaKeyboard.h"
+#include "src/userUsbHidMediaKeyboard/USBHIDMediaKeyboard.h"
 #include <WS2812.h>
 
 //// PIN = CODE
