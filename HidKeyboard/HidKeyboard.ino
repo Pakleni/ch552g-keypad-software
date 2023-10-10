@@ -224,6 +224,81 @@ void readEncoder()
   }
 }
 
+int8_t m_pin_a = 0;
+int8_t m_pin_b = 0;
+uint8_t m_pin_active = LOW;
+uint8_t m_steps_per_count = 4;
+bool m_reversed = true;
+volatile int m_change = 0;
+int8_t m_previous_state = 0;
+int m_steps = 0;
+
+int8_t pin_state()
+{
+  int8_t state_now = 0;
+  if (digitalRead(m_pin_a) == m_pin_active)
+  {
+    state_now |= 2;
+  }
+  if (digitalRead(m_pin_b) == m_pin_active)
+  {
+    state_now |= 1;
+  }
+  return state_now;
+}
+
+void BasicEncoder(int8_t pinA, int8_t pinB, uint8_t active_state, uint8_t steps)
+{
+  m_pin_a = pinA;
+  m_pin_b = pinB;
+  m_pin_active = active_state;
+  m_steps_per_count = steps;
+  m_previous_state = pin_state();
+  m_change = 0;
+}
+
+void service()
+{
+  int8_t state_now = pin_state();
+  state_now ^= state_now >> 1; // two bit gray-to-binary
+  int8_t difference = m_previous_state - state_now;
+  // bit 1 has the direction, bit 0 is set if changeed
+  if (difference & 1)
+  {
+    m_previous_state = state_now;
+    int delta = (difference & 2) - 1;
+    if (m_reversed)
+    {
+      delta = -delta;
+    }
+    m_change += delta;
+    m_steps += delta;
+  }
+}
+
+// Read changes frequently enough that overflows cannot happen.
+int8_t get_change()
+{
+  int8_t change = m_change;
+  // the switch statement can make better code because only optimised
+  // operations are used instead of generic division
+  switch (m_steps_per_count)
+  {
+  case 4:
+    m_change %= 4;
+    change /= 4;
+    break;
+  case 2:
+    m_change %= 2;
+    change /= 2;
+    break;
+  default:
+    m_change = 0;
+    break;
+  }
+  return change;
+}
+
 void setup()
 {
   USBInit();
@@ -237,6 +312,8 @@ void setup()
   pinMode(EC11A_PIN, INPUT_PULLUP);
   pinMode(EC11B_PIN, INPUT_PULLUP);
   pinMode(LEDPIN, OUTPUT);
+
+  BasicEncoder(EC11A_PIN, EC11B_PIN, LOW, 4);
 }
 
 void loop()
@@ -247,8 +324,21 @@ void loop()
     buttonPress(i);
   }
 
-  // Rotary Encoder A and B
-  readEncoder();
+  // // Rotary Encoder A and B
+  // readEncoder();
+  service();
+  int encoder_change = get_change();
+  if (encoder_change)
+  {
+    if (encoder_change > 0)
+    {
+      Consumer_write(RotaryCW);
+    }
+    else
+    {
+      Consumer_write(RotaryCCW);
+    }
+  }
 
   // Rotary Encoder Button
   static bool presPrevRE = false;
