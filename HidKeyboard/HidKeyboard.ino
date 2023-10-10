@@ -27,6 +27,7 @@
 #endif
 
 #include "USBHIDMediaKeyboard.h"
+#include <WS2812.h>
 
 //// PIN = CODE
 // ------
@@ -59,122 +60,21 @@
 #define EC11A_PIN 31
 #define EC11B_PIN 30
 #define LEDPIN 34
-volatile int mRotaryEncoderPulse = 0;
-volatile uint8_t mLastestRotaryEncoderPinAB = 0; // last last pin value of A and B
-volatile uint8_t mLastRotaryEncoderPinAB = 0;    // last pin value of A and B
-
-byte pins[] = {
-    BUTTON1_PIN,
-    BUTTON2_PIN,
-    BUTTON3_PIN,
-    BUTTON4_PIN,
-    BUTTON5_PIN,
-    BUTTON6_PIN,
-};
-
-byte keypad[] = {
-    KeyPad1,
-    KeyPad2,
-    KeyPad3,
-    KeyPad4,
-    KeyPad5,
-    KeyPad6,
-};
-
-bool pressPrev[] = {
-    false,
-    false,
-    false,
-    false,
-    false,
-    false,
-};
-
-byte delays[] = {
-    0,
-    0,
-    0,
-    0,
-    0,
-    0,
-};
-
-// This block sends 24 bits to the LED
-// Each LED accepts 24 bits and forwards the rest
-// after the delay, a new block will need to be sent
-//
-// Send Green value from Bit7 to 0
-// Send Red value from Bit7 to 0
-// Send Blue value from Bit7 to 0
-//
-// 24MHz is 41.666666666667ns per clock cycle
-// 0 is 300ns high, 900ns low
-// 1 is 600ns high, 600ns low
-// 300ns is 7.2 clock cycles
-// 600ns is 14.4 clock cycles
-// 900ns is 21.6 clock cycles
-void neopixel_show_long_P3_4(uint32_t dataAndLen)
-{
-  //'dpl' (LSB),'dph','b' & 'acc'
-  // DPTR is the array address, B is the low byte of length
-  __asm__("    mov r3, b                           \n"
-          ";save EA to R6                          \n"
-          "    mov c,_EA                           \n"
-          "    clr a                               \n"
-          "    rlc a                               \n"
-          "    mov r6, a                           \n"
-          ";disable interrupt                      \n"
-          "    clr _EA                             \n"
-
-          "byteLoop$:                              \n"
-          "    movx  a,@dptr                       \n"
-          "    inc dptr                            \n"
-          "    mov r2,#8                           \n"
-          "bitLoop$:                               \n"
-          "    rlc a                               \n"
-          "    setb _P3_4                          \n"
-          "    jc bit7High$                        \n"
-          "    clr _P3_4                           \n"
-          "bit7High$:                              \n"
-          "    mov r1,#5                           \n"
-          "bitDelay$:                              \n"
-          "    djnz r1,bitDelay$                   \n"
-          "    clr _P3_4                           \n"
-          "    djnz r2,bitLoop$                    \n"
-          "    djnz r3,byteLoop$                   \n"
-
-          ";restore EA from R6                     \n"
-          "    mov a,r6                            \n"
-          "    jz  skipRestoreEA_NP$               \n"
-          "    setb  _EA                           \n"
-          "skipRestoreEA_NP$:                      \n");
-  (void)dataAndLen;
-}
 
 // brightness is from 0 to 1
 #define BRIGHTNESS 0.3
+// color delay controls the speed of the color change
+// higher value means slower change
 #define COLOR_DELAY 1000
-byte RValue = 0x00, GValue = 0x00, BValue = 0xff;
 #define NUM_LEDS 6
 #define NUM_BYTES (NUM_LEDS * 3)
-__xdata uint8_t ledData[NUM_BYTES];
-
-#define set_pixel_for_GRB_LED(ADDR, INDEX, R, G, B) \
-  {                                                 \
-    __xdata uint8_t *ptr = (ADDR) + ((INDEX)*3);    \
-    ptr[0] = (G);                                   \
-    ptr[1] = (R);                                   \
-    ptr[2] = (B);                                   \
-  };
-
-#define neopixel_show_P3_4(ADDR, LEN)                     \
-  neopixel_show_long_P3_4((((uint16_t)(ADDR)) & 0xFFFF) | \
-                          (((uint32_t)(LEN)&0xFF) << 16));
 
 void handleColor()
 {
-  static byte colorDelay = 0;
   static byte mode = 0;
+  static byte colorDelay = 0;
+  static byte RValue = 0x00, GValue = 0x00, BValue = 0xff;
+  static __xdata uint8_t ledData[NUM_BYTES];
 
   // The color delay is used for delaying a color change
   if (colorDelay > 0)
@@ -216,13 +116,62 @@ void handleColor()
   {
     set_pixel_for_GRB_LED(ledData, i, RValue * BRIGHTNESS, GValue * BRIGHTNESS, BValue * BRIGHTNESS);
   }
+  // This sends 24 bits for each LED
+  // Each LED accepts 24 bits and forwards the rest
+  // if changing the LED pin, make sure to change the
+  // neopixel_show_P3_4 function as well
   neopixel_show_P3_4(ledData, NUM_BYTES);
 
   colorDelay = COLOR_DELAY;
 }
 
+// This controlls the button
+// presses and releases
+// for the 6 buttons
 void buttonPress(int i)
 {
+  static byte pins[] = {
+      BUTTON1_PIN,
+      BUTTON2_PIN,
+      BUTTON3_PIN,
+      BUTTON4_PIN,
+      BUTTON5_PIN,
+      BUTTON6_PIN,
+  };
+
+  static byte keypad[] = {
+      KeyPad1,
+      KeyPad2,
+      KeyPad3,
+      KeyPad4,
+      KeyPad5,
+      KeyPad6,
+  };
+
+  static bool pressPrev[] = {
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+  };
+
+  static byte delays[] = {
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+  };
+
+  // debounce
+  if (delays[i] > 0)
+  {
+    delays[i]--;
+    return;
+  }
   bool press = !digitalRead(pins[i]);
   if (pressPrev[i] != press)
   {
@@ -251,9 +200,7 @@ void setup()
   pinMode(EC11D_PIN, INPUT_PULLUP);
   pinMode(EC11A_PIN, INPUT_PULLUP);
   pinMode(EC11B_PIN, INPUT_PULLUP);
-
   pinMode(LEDPIN, OUTPUT);
-  digitalWrite(LEDPIN, LOW);
 }
 
 void loop()
@@ -261,18 +208,14 @@ void loop()
   // BUTTONS 1..6
   for (int i = 0; i < 6; i++)
   {
-    if (delays[i] > 0)
-    {
-      delays[i]--;
-      continue;
-    }
     buttonPress(i);
   }
 
-  // BUTTON 7
+  // Rotary Encoder Button
   static bool pressPrev7 = false;
   static byte delay7 = 0;
 
+  // debounce
   if (delay7 > 0)
   {
     delay7--;
@@ -295,8 +238,12 @@ void loop()
     }
   }
 
-  // BUTTON 8, 9
+  // Rotary Encoder A and B
+  static volatile uint8_t mLastestRotaryEncoderPinAB = 0; // last last pin value of A and B
+  static volatile uint8_t mLastRotaryEncoderPinAB = 0;    // last pin value of A and B
   static byte delay89 = 0;
+
+  // debounce
   if (delay89 > 0)
   {
     delay89--;
