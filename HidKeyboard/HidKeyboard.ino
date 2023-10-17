@@ -40,14 +40,15 @@
 #define EC11B_PIN 30
 #define LEDPIN 34
 
-// brightness is from 0 to 100
-double brightness = 30;
+// EEPROM brightness pointer (value is from 0 to BRIGHTNESS_STEPS)
+uint8_t brightnessPtr = 0;
 // color delay controls the speed of the color change
 // higher value means slower change
 // it is in millis
 #define COLOR_DELAY 50
 #define NUM_LEDS 6
 #define NUM_BYTES (NUM_LEDS * 3)
+#define BRIGHTNESS_STEPS 10
 
 void handleColor()
 {
@@ -90,7 +91,8 @@ void handleColor()
     break;
   }
 
-  double pbrightness = brightness / 100.0;
+  uint8_t brightness = eeprom_read_byte(brightnessPtr);
+  double pbrightness = brightness / (double)BRIGHTNESS_STEPS;
   byte red = RValue * pbrightness;
   byte green = GValue * pbrightness;
   byte blue = BValue * pbrightness;
@@ -235,6 +237,12 @@ void setup()
   pinMode(LEDPIN, OUTPUT);
 
   m_previous_state = pin_state();
+
+  uint8_t brightness = eeprom_read_byte(brightnessPtr);
+  if (brightness > BRIGHTNESS_STEPS)
+  {
+    eeprom_write_byte(brightnessPtr, BRIGHTNESS_STEPS);
+  }
 }
 
 void loop()
@@ -252,26 +260,33 @@ void loop()
   int encoder_change = get_change();
   if (encoder_change)
   {
-    if (encoder_change > 0 && !buttons->pressPrev)
+    if (!buttons->pressPrev)
     {
-      Consumer_write(RotaryCW);
-    }
-    else if (encoder_change < 0 && !buttons->pressPrev)
-    {
-      Consumer_write(RotaryCCW);
-    }
-    else if (encoder_change > 0 && buttons->pressPrev)
-    {
-      if (brightness < 100)
+      if (encoder_change > 0)
       {
-        ++brightness;
+        Consumer_write(RotaryCW);
+      }
+      else if (encoder_change < 0)
+      {
+        Consumer_write(RotaryCCW);
       }
     }
-    else if (encoder_change < 0 && buttons->pressPrev)
+    else
     {
-      if (brightness > 0)
+      uint8_t brightness = eeprom_read_byte(brightnessPtr);
+      if (encoder_change > 0)
       {
-        --brightness;
+        if (brightness < BRIGHTNESS_STEPS)
+        {
+          eeprom_write_byte(brightnessPtr, brightness + 1);
+        }
+      }
+      else if (encoder_change < 0)
+      {
+        if (brightness > 0)
+        {
+          eeprom_write_byte(brightnessPtr, brightness - 1);
+        }
       }
     }
   }
